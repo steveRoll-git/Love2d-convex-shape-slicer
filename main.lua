@@ -41,110 +41,115 @@ do -- generate the first shape
   table.insert(shapes, circle)
 end
 
+local normalPush = 5 -- by how much the newly made shapes will move
+
+local function sliceShapes(xFrom, yFrom, xTo, yTo)
+  
+  for i = #shapes, 1, -1 do
+    local shape = shapes[i]
+    
+    local intersections = {}
+    for i=1, #shape, 2 do -- check the intersection of the slice line with every line in the shape
+      local x1, y1, x2, y2 = shape[i], shape[i + 1], (i == #shape - 1) and shape[1] or shape[i + 2], (i == #shape - 1) and shape[2] or shape[i + 3]
+      local ix, iy = lineIntersectsLine(x1, y1, x2, y2, xFrom, yFrom, xTo, yTo)
+      if ix then
+        table.insert(intersections, {ix, iy, index = i}) -- stores the position of the intersection, and the index of the line it intersected with
+      end
+    end
+    
+    if #intersections == 2 then -- the shape is sliced only when there are 2 intersections
+      table.remove(shapes, i)
+      
+      local normal = {x = intersections[2][1] - intersections[1][1], y = intersections[2][2] - intersections[1][2]} -- vector that is perpendicular to the slice line
+      do
+        -- normalize `normal` and make it perpendicular
+        local len = (normal.x^2 + normal.y^2)^0.5
+        normal.x = normal.x / len
+        normal.y = normal.y / len
+        normal.x, normal.y = normal.y, -normal.x
+      end
+      
+      local newShape1 = {intersections[1][1], intersections[1][2]} -- will contain points from intersections[1] to intersections[2]
+      local newShape2 = {intersections[2][1], intersections[2][2]} -- will contain points from intersections[2] to intersections[1]
+      
+      local ind1 = intersections[1].index
+      local ind2 = intersections[2].index
+      
+      local lastEarly = 3
+      
+      for i=1, #shape, 2 do -- iterate through the original shape's points and decide whether we add it to newShape1 or newShape2
+        local finalShape -- which shape will we add this point to?
+        local index -- where will we add the point?
+        
+        if i > ind1 and i <= ind2 then
+          -- this point belongs to `newShape1` if it's between `ind1` and `ind2`
+          finalShape = newShape1
+        else
+          -- otherwise, it belongs to `newShape2`
+          finalShape = newShape2
+          if i > ind2 then
+            -- add this point before the first ones, so the order will be correct
+            index = lastEarly
+            lastEarly = lastEarly + 2
+          end
+        end
+        
+        index = index or (#finalShape + 1) -- if we didn't set `index`, just add the point to the end of the shape
+        
+        --add the x and y of the point to the shape
+        table.insert(finalShape, index, shape[i])
+        index = index + 1
+        table.insert(finalShape, index, shape[i + 1])
+        
+        if not finalShape.tx then
+          -- which side of the slicing line is this shape on?
+          if ccw(intersections[1][1], intersections[1][2], intersections[2][1], intersections[2][2], shape[i], shape[i + 1]) then
+            finalShape.tx, finalShape.ty = -normal.x * normalPush, -normal.y * normalPush
+          else
+            finalShape.tx, finalShape.ty = normal.x * normalPush, normal.y * normalPush
+          end
+        end
+      end
+      
+      --newShape1 ends with intersections[2]
+      table.insert(newShape1, intersections[2][1])
+      table.insert(newShape1, intersections[2][2])
+      
+      --newShape2 ends with intersections[1]
+      table.insert(newShape2, intersections[1][1])
+      table.insert(newShape2, intersections[1][2])
+      
+      --move newShape1's points by its tx and ty
+      for i=1, #newShape1, 2 do
+        newShape1[i] = newShape1[i] + newShape1.tx
+        newShape1[i + 1] = newShape1[i + 1] + newShape1.ty
+      end
+      
+      --move newShape2's points by its tx and ty
+      for i=1, #newShape2, 2 do
+        newShape2[i] = newShape2[i] + newShape2.tx
+        newShape2[i + 1] = newShape2[i + 1] + newShape2.ty
+      end
+      
+      --add the resulting shapes
+      table.insert(shapes, newShape1)
+      table.insert(shapes, newShape2)
+    end
+    
+  end
+  
+end
+
 local clickStart = {}
 local clicked = false
-
-local normalPush = 5 -- by how much the newly made shapes will move
 
 function love.mousepressed(x, y, b)
   if b == 1 then
     if not clicked then
       clickStart[1], clickStart[2] = x, y
     elseif x ~= clickStart[1] or y ~= clickStart[2] then
-      
-      for i = #shapes, 1, -1 do
-        local shape = shapes[i]
-        
-        local intersections = {}
-        for i=1, #shape, 2 do -- check the intersection of the slice line with every line in the shape
-          local x1, y1, x2, y2 = shape[i], shape[i + 1], (i == #shape - 1) and shape[1] or shape[i + 2], (i == #shape - 1) and shape[2] or shape[i + 3]
-          local ix, iy = lineIntersectsLine(x1, y1, x2, y2, clickStart[1], clickStart[2], x, y)
-          if ix then
-            table.insert(intersections, {ix, iy, index = i}) -- stores the position of the intersection, and the index of the line it intersected with
-          end
-        end
-        
-        if #intersections == 2 then -- the shape is sliced only when there are 2 intersections
-          table.remove(shapes, i)
-          
-          local normal = {x = intersections[2][1] - intersections[1][1], y = intersections[2][2] - intersections[1][2]} -- vector that is perpendicular to the slice line
-          do
-            -- normalize `normal` and make it perpendicular
-            local len = (normal.x^2 + normal.y^2)^0.5
-            normal.x = normal.x / len
-            normal.y = normal.y / len
-            normal.x, normal.y = normal.y, -normal.x
-          end
-          
-          local newShape1 = {intersections[1][1], intersections[1][2]} -- will contain points from intersections[1] to intersections[2]
-          local newShape2 = {intersections[2][1], intersections[2][2]} -- will contain points from intersections[2] to intersections[1]
-          
-          local ind1 = intersections[1].index
-          local ind2 = intersections[2].index
-          
-          local lastEarly = 3
-          
-          for i=1, #shape, 2 do -- iterate through the original shape's points and decide whether we add it to newShape1 or newShape2
-            local finalShape -- which shape will we add this point to?
-            local index -- where will we add the point?
-            
-            if i > ind1 and i <= ind2 then
-              -- this point belongs to `newShape1` if it's between `ind1` and `ind2`
-              finalShape = newShape1
-            else
-              -- otherwise, it belongs to `newShape2`
-              finalShape = newShape2
-              if i > ind2 then
-                -- add this point before the first ones, so the order will be correct
-                index = lastEarly
-                lastEarly = lastEarly + 2
-              end
-            end
-            
-            index = index or (#finalShape + 1) -- if we didn't set `index`, just add the point to the end of the shape
-            
-            --add the x and y of the point to the shape
-            table.insert(finalShape, index, shape[i])
-            index = index + 1
-            table.insert(finalShape, index, shape[i + 1])
-            
-            if not finalShape.tx then
-              -- which side of the slicing line is this shape on?
-              if ccw(intersections[1][1], intersections[1][2], intersections[2][1], intersections[2][2], shape[i], shape[i + 1]) then
-                finalShape.tx, finalShape.ty = -normal.x * normalPush, -normal.y * normalPush
-              else
-                finalShape.tx, finalShape.ty = normal.x * normalPush, normal.y * normalPush
-              end
-            end
-          end
-          
-          --newShape1 ends with intersections[2]
-          table.insert(newShape1, intersections[2][1])
-          table.insert(newShape1, intersections[2][2])
-          
-          --newShape2 ends with intersections[1]
-          table.insert(newShape2, intersections[1][1])
-          table.insert(newShape2, intersections[1][2])
-          
-          --move newShape1's points by its tx and ty
-          for i=1, #newShape1, 2 do
-            newShape1[i] = newShape1[i] + newShape1.tx
-            newShape1[i + 1] = newShape1[i + 1] + newShape1.ty
-          end
-          
-          --move newShape2's points by its tx and ty
-          for i=1, #newShape2, 2 do
-            newShape2[i] = newShape2[i] + newShape2.tx
-            newShape2[i + 1] = newShape2[i + 1] + newShape2.ty
-          end
-          
-          --add the resulting shapes
-          table.insert(shapes, newShape1)
-          table.insert(shapes, newShape2)
-        end
-        
-      end
-      
+      --only slice the shapes if clickStart and x,y actually make a line
+      sliceShapes(clickStart[1], clickStart[2], x, y)
     end
     clicked = not clicked
   end
