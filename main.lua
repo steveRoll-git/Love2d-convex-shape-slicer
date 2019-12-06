@@ -26,7 +26,7 @@ end
 
 local shapes = {}
 
-do -- generate the shape
+do -- generate the first shape
   local circle = {}
   
   local radius = 100
@@ -44,7 +44,7 @@ end
 local clickStart = {}
 local clicked = false
 
-local normalPush = 7 -- by how much the newly made shapes will move
+local normalPush = 5 -- by how much the newly made shapes will move
 
 function love.mousepressed(x, y, b)
   if b == 1 then
@@ -67,12 +67,13 @@ function love.mousepressed(x, y, b)
         if #intersections == 2 then -- the shape is sliced only when there are 2 intersections
           table.remove(shapes, i)
           
-          local normal = {x = intersections[2][1] - intersections[1][1], y = intersections[2][2] - intersections[1][2]}
+          local normal = {x = intersections[2][1] - intersections[1][1], y = intersections[2][2] - intersections[1][2]} -- vector that is perpendicular to the slice line
           do
+            -- normalize `normal` and make it perpendicular
             local len = (normal.x^2 + normal.y^2)^0.5
             normal.x = normal.x / len
             normal.y = normal.y / len
-            normal.x, normal.y = normal.y, -normal.x -- vector that is perpendicular to the slice line
+            normal.x, normal.y = normal.y, -normal.x
           end
           
           local newShape1 = {intersections[1][1], intersections[1][2]} -- will contain points from intersections[1] to intersections[2]
@@ -84,20 +85,23 @@ function love.mousepressed(x, y, b)
           local lastEarly = 3
           
           for i=1, #shape, 2 do -- iterate through the original shape's points and decide whether we add it to newShape1 or newShape2
-            local finalShape
-            local index
+            local finalShape -- which shape will we add this point to?
+            local index -- where will we add the point?
             
             if i > ind1 and i <= ind2 then
+              -- this point belongs to `newShape1` if it's between `ind1` and `ind2`
               finalShape = newShape1
             else
+              -- otherwise, it belongs to `newShape2`
               finalShape = newShape2
               if i > ind2 then
+                -- add this point before the first ones, so the order will be correct
                 index = lastEarly
                 lastEarly = lastEarly + 2
               end
             end
             
-            index = index or (#finalShape + 1)
+            index = index or (#finalShape + 1) -- if we didn't set `index`, just add the point to the end of the shape
             
             --add the x and y of the point to the shape
             table.insert(finalShape, index, shape[i])
@@ -114,25 +118,27 @@ function love.mousepressed(x, y, b)
             end
           end
           
-          --move all the shape's points by tx and ty
+          --newShape1 ends with intersections[2]
+          table.insert(newShape1, intersections[2][1])
+          table.insert(newShape1, intersections[2][2])
+          
+          --newShape2 ends with intersections[1]
+          table.insert(newShape2, intersections[1][1])
+          table.insert(newShape2, intersections[1][2])
+          
+          --move newShape1's points by its tx and ty
           for i=1, #newShape1, 2 do
             newShape1[i] = newShape1[i] + newShape1.tx
             newShape1[i + 1] = newShape1[i + 1] + newShape1.ty
           end
           
+          --move newShape2's points by its tx and ty
           for i=1, #newShape2, 2 do
             newShape2[i] = newShape2[i] + newShape2.tx
             newShape2[i + 1] = newShape2[i + 1] + newShape2.ty
           end
           
-          --finish the shapes with the other intersection point
-          
-          table.insert(newShape1, intersections[2][1])
-          table.insert(newShape1, intersections[2][2])
-          
-          table.insert(newShape2, intersections[1][1])
-          table.insert(newShape2, intersections[1][2])
-          
+          --add the resulting shapes
           table.insert(shapes, newShape1)
           table.insert(shapes, newShape2)
         end
