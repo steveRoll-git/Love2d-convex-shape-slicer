@@ -1,17 +1,22 @@
+--[[
+Anything that describes a position is a table with indexes [1] and [2] being the x and y of the point.
+(other than `normal` on line 72)
+This is so it'll be easier to draw the shapes with love.graphics.polygon later
+]]
+
 local love = love
 local lg = love.graphics
 
 lg.setBackgroundColor(0.4, 0.4, 0.4)
 
 local table = table
-
 local math = math
 
-local function ccw(x1,y1,x2,y2,x3,y3)
+local function ccw(x1, y1,  x2, y2,  x3, y3) -- returns whether the points 1, 2 and 3 are in counter-clockwise order
   return (y3 - y1) * (x2 - x1) > (y2 - y1) * (x3 - x1)
 end
 
-local function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4)
+local function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) -- returns the point of intersection between segments 1-2 and 3-4
   local x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4))
   local y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4))
   if ccw(x1, y1, x3, y3, x4, y4) ~= ccw(x2, y2, x3, y3, x4, y4) and ccw(x1, y1, x2, y2, x3, y3) ~= ccw(x1, y1, x2, y2, x4, y4) then
@@ -21,7 +26,7 @@ end
 
 local shapes = {}
 
-do
+do -- generate the shape
   local circle = {}
   
   local radius = 100
@@ -39,7 +44,7 @@ end
 local clickStart = {}
 local clicked = false
 
-local normalPush = 7
+local normalPush = 7 -- by how much the newly made shapes will move
 
 function love.mousepressed(x, y, b)
   if b == 1 then
@@ -51,15 +56,15 @@ function love.mousepressed(x, y, b)
         local shape = shapes[i]
         
         local intersections = {}
-        for i=1, #shape, 2 do
+        for i=1, #shape, 2 do -- check the intersection of the slice line with every line in the shape
           local x1, y1, x2, y2 = shape[i], shape[i + 1], (i == #shape - 1) and shape[1] or shape[i + 2], (i == #shape - 1) and shape[2] or shape[i + 3]
           local ix, iy = lineIntersectsLine(x1, y1, x2, y2, clickStart[1], clickStart[2], x, y)
           if ix then
-            table.insert(intersections, {index = i, ix, iy})
+            table.insert(intersections, {ix, iy, index = i}) -- stores the position of the intersection, and the index of the line it intersected with
           end
         end
         
-        if #intersections == 2 then
+        if #intersections == 2 then -- the shape is sliced only when there are 2 intersections
           table.remove(shapes, i)
           
           local normal = {x = intersections[2][1] - intersections[1][1], y = intersections[2][2] - intersections[1][2]}
@@ -67,18 +72,18 @@ function love.mousepressed(x, y, b)
             local len = (normal.x^2 + normal.y^2)^0.5
             normal.x = normal.x / len
             normal.y = normal.y / len
-            normal.x, normal.y = normal.y, -normal.x
+            normal.x, normal.y = normal.y, -normal.x -- vector that is perpendicular to the slice line
           end
           
-          local newShape1 = {intersections[1][1], intersections[1][2]} -- from 1 to 2
-          local newShape2 = {intersections[2][1], intersections[2][2]} -- from 2 to 1
+          local newShape1 = {intersections[1][1], intersections[1][2]} -- will contain points from intersections[1] to intersections[2]
+          local newShape2 = {intersections[2][1], intersections[2][2]} -- will contain points from intersections[2] to intersections[1]
           
           local ind1 = intersections[1].index
           local ind2 = intersections[2].index
           
           local lastEarly = 3
           
-          for i=1, #shape, 2 do
+          for i=1, #shape, 2 do -- iterate through the original shape's points and decide whether we add it to newShape1 or newShape2
             local finalShape
             local index
             
@@ -94,11 +99,13 @@ function love.mousepressed(x, y, b)
             
             index = index or (#finalShape + 1)
             
+            --add the x and y of the point to the shape
             table.insert(finalShape, index, shape[i])
             index = index + 1
             table.insert(finalShape, index, shape[i + 1])
             
             if not finalShape.tx then
+              -- which side of the slicing line is this shape on?
               if ccw(intersections[1][1], intersections[1][2], intersections[2][1], intersections[2][2], shape[i], shape[i + 1]) then
                 finalShape.tx, finalShape.ty = -normal.x * normalPush, -normal.y * normalPush
               else
@@ -107,6 +114,7 @@ function love.mousepressed(x, y, b)
             end
           end
           
+          --move all the shape's points by tx and ty
           for i=1, #newShape1, 2 do
             newShape1[i] = newShape1[i] + newShape1.tx
             newShape1[i + 1] = newShape1[i + 1] + newShape1.ty
@@ -116,6 +124,8 @@ function love.mousepressed(x, y, b)
             newShape2[i] = newShape2[i] + newShape2.tx
             newShape2[i + 1] = newShape2[i + 1] + newShape2.ty
           end
+          
+          --finish the shapes with the other intersection point
           
           table.insert(newShape1, intersections[2][1])
           table.insert(newShape1, intersections[2][2])
